@@ -48,6 +48,43 @@ void CControllerConfigManager::MakeControllerActionsBlank()
 #ifdef RW_GL3
 int MapIdToButtonId(int mapId) {
 	switch (mapId) {
+#if defined LIBRW_SDL2
+		// This build has no GLFW at all (Android/SDL2) -- same ordinals
+		// GLFW_GAMEPAD_BUTTON_* names below resolve to (that's the actual
+		// standard/stable "Xbox layout" gamepad button order both GLFW and
+		// this scheme are built around), just spelled as plain literals so
+		// this file doesn't need a GLFW header. skel/sdl2/sdl2.cpp's
+		// CaptureTouchPad()/CapturePad() write mappedButtons[] using these
+		// same indices (see the GAME_BTN_* enum there) -- keep both in sync.
+		case 0: // A / Cross
+			return 2;
+		case 1: // B / Circle
+			return 1;
+		case 2: // X / Square
+			return 3;
+		case 3: // Y / Triangle
+			return 4;
+		case 4: // Left bumper / L1
+			return 7;
+		case 5: // Right bumper / R1
+			return 8;
+		case 6: // Back / Select
+			return 9;
+		case 7: // Start
+			return 12;
+		case 9: // Left thumb / L3
+			return 10;
+		case 10: // Right thumb / R3
+			return 11;
+		case 11: // D-Pad up
+			return 13;
+		case 12: // D-Pad right
+			return 14;
+		case 13: // D-Pad down
+			return 15;
+		case 14: // D-Pad left
+			return 16;
+#else
 		case GLFW_GAMEPAD_BUTTON_A: // Cross
 			return 2;
 		case GLFW_GAMEPAD_BUTTON_B: // Circle
@@ -76,7 +113,8 @@ int MapIdToButtonId(int mapId) {
 			return 15;
 		case GLFW_GAMEPAD_BUTTON_DPAD_LEFT:
 			return 16;
-		// GLFW sends those as axes, so I added them here manually.
+#endif
+		// Both builds send triggers as axes, so they're added here manually.
 		case 15: // Left trigger
 			return 5;
 		case 16: // Right trigger
@@ -2773,8 +2811,13 @@ void CControllerConfigManager::UpdateJoyButtonState(int32 padnumber)
 #elif defined RW_GL3
 	if (m_NewState.isGamepad) {
 		for (int32 i = 0; i < MAX_BUTTONS; i++) {
+#if defined LIBRW_SDL2
+			if (i == 8) // GLFW_GAMEPAD_BUTTON_GUIDE's ordinal -- see MapIdToButtonId() above
+				continue;
+#else
 			if (i == GLFW_GAMEPAD_BUTTON_GUIDE)
 				continue;
+#endif
 
 			m_aButtonStates[MapIdToButtonId(i)-1] = m_NewState.mappedButtons[i];
 		}

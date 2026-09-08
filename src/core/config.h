@@ -484,8 +484,12 @@ enum Config {
 	#define IGNORE_MOUSE_KEYBOARD // ignore mouse & keyboard input
 #endif
 
-#ifdef __SWITCH__
-	#define USE_UNNAMED_SEM // named semaphores are unsupported on the switch
+#if defined __SWITCH__ || defined ANDROID
+	// Named semaphores (sem_open()) are unsupported on the switch, and on
+	// Android bionic's sem_open() always fails (ENOSYS, no named-semaphore
+	// support at all) -- CdStreamInitThread() (CdStream_posix.cpp) would
+	// otherwise ASSERT(0) and abort on the very first RE3_SEM_OPEN() call.
+	#define USE_UNNAMED_SEM
 #endif
 
 #endif // VANILLA_DEFINES

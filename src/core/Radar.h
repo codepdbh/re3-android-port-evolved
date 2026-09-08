@@ -96,6 +96,12 @@ VALIDATE_SIZE(sRadarTrace, 0x30);
 #else
 #define RADAR_BOTTOM (47.0f)
 #endif
+// On Android the movement stick sits bottom-left, right where the radar
+// normally lives -- pin it to the top-left there instead (Radar.cpp and
+// Hud.cpp, the two places that position it, both switch on this).
+#if defined ANDROID
+#define RADAR_TOP (30.0f)
+#endif
 
 #ifdef FIX_RADAR
 /*

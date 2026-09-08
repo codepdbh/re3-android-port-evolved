@@ -91,7 +91,16 @@ void GetDateFormat(int unused1, int unused2, SYSTEMTIME* in, int unused3, char* 
 	linuxTime.tm_hour = in->wHour;
 	linuxTime.tm_min = in->wMinute;
 	linuxTime.tm_sec = in->wSecond;
+#if defined ANDROID
+	// Bionic (Android's libc) doesn't implement nl_langinfo()/langinfo.h at
+	// all -- there's no locale database to query on-device. Fall back to a
+	// fixed format; this only affects savegame/UI date strings, matching the
+	// same "en_US" %m/%d/%y default this would get from D_FMT on a system
+	// with the C/POSIX locale anyway.
+	strftime(out, size, "%m/%d/%y", &linuxTime);
+#else
 	strftime(out, size, nl_langinfo(D_FMT), &linuxTime);
+#endif
 }
 
 void FileTimeToSystemTime(time_t* writeTime, SYSTEMTIME* out) {
@@ -199,6 +208,30 @@ char* casepath(char const* path, bool checkPathFirst)
 
     DIR* d;
     char* c;
+
+#if defined ANDROID
+    // Every path this function ever receives is built from
+    // CFileMgr::ms_rootDirName (itself captured from getcwd() right after
+    // main() chdir()'d into StorageRootBuffer -- see psInitialize() in
+    // skel/sdl2/sdl2.cpp), so it's always StorageRootBuffer plus a relative
+    // tail. Below, an absolute path (leading '/') makes this function open
+    // the filesystem root ("/") to walk down from -- opendir("/") is denied
+    // by Android's app sandboxing regardless of the MANAGE_EXTERNAL_STORAGE
+    // grant (that only covers /storage/emulated/0/..., not the device root),
+    // which crashed every single call with a NULL DIR*. Stripping the known
+    // StorageRootBuffer prefix here turns the path relative, so the branch
+    // below opens "." (cwd, already StorageRootBuffer, fully accessible)
+    // instead.
+    extern char* StorageRootBuffer;
+    if (StorageRootBuffer != nullptr) {
+        size_t rootLen = strlen(StorageRootBuffer);
+        if (strncmp(p, StorageRootBuffer, rootLen) == 0) {
+            p += rootLen;
+            while (*p == '/' || *p == '\\')
+                p++;
+        }
+    }
+#endif
 
     #if defined(__SWITCH__) || defined(PSP2)
     if( (c = strstr(p, ":/")) != NULL) // scheme used by some environments, eg. switch, vita
