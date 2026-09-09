@@ -125,7 +125,7 @@ Este fork sigue las mismas reglas de contribución que el re3 original — ver [
 
 ## Apoyá el proyecto
 
-Si te sirvió este port, suscribite al canal de YouTube y dejá una ⭐ en el repositorio — ayuda un montón a que más gente lo encuentre.
+Si te sirvió este port, suscribite a mi canal de YouTube ([@DanielMcDt](https://www.youtube.com/@DanielMcDt)) y dejá una ⭐ en el repositorio — ayuda un montón a que más gente lo encuentre.
 
 ## License
 
