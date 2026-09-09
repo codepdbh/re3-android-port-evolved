@@ -146,9 +146,25 @@ CTxdStore::LoadTxd(int slot, const char *filename)
 #ifdef GTA_PC
 	_rwD3D8TexDictionaryEnableRasterFormatConversion(true);
 #endif
+#if defined ANDROID
+	// Bounded on Android only: a genuinely missing/corrupt TXD should fail
+	// this load, not spin the thread forever retrying the exact same failing
+	// open() (which is what happened here while a since-fixed casepath() bug
+	// made every open fail -- see crossplatform.cpp's casepath()). Every
+	// other platform keeps the original unbounded retry.
+	int attempt = 0;
+	do
+		stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, filename);
+	while(stream == nil && ++attempt < 1000);
+	if (stream == nil) {
+		debug("CTxdStore::LoadTxd: giving up on '%s' after %d attempts\n", filename, attempt);
+		return false;
+	}
+#else
 	do
 		stream = RwStreamOpen(rwSTREAMFILENAME, rwSTREAMREAD, filename);
 	while(stream == nil);
+#endif
 	ret = LoadTxd(slot, stream);
 	RwStreamClose(stream, nil);
 	return ret;

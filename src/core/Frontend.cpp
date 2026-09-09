@@ -802,6 +802,8 @@ CMenuManager::CentreMousePointer()
 		Point.y = SCREEN_HEIGHT / 2;
 		ClientToScreen(PSGLOBAL(window), &Point);
 		SetCursorPos(Point.x, Point.y);
+#elif defined LIBRW_SDL2
+		// No real cursor to move on Android.
 #elif defined RW_GL3
 		glfwSetCursorPos(PSGLOBAL(window), SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2);
 #endif
@@ -5139,6 +5141,15 @@ CMenuManager::ProcessButtonPresses(void)
 							PSGLOBAL(joy1)->GetCapabilities(&devCaps);
 							ControlsManager.InitDefaultControlConfigJoyPad(devCaps.dwButtons);
 						}
+#elif defined LIBRW_SDL2
+						// A real SDL_GameController's actual button count is
+						// queried where it connects (joysChangeCB() in
+						// skel/sdl2/sdl2.cpp); this "reset to defaults" menu
+						// action doesn't have that handle available here, so
+						// it just uses the touch/gamepad convention this
+						// build treats as canonical everywhere else (16
+						// buttons, see JOY_BUTTONS in ControllerConfig.h).
+						ControlsManager.InitDefaultControlConfigJoyPad(JOY_BUTTONS);
 #else
 						if (PSGLOBAL(joy1id) != -1 && glfwJoystickPresent(PSGLOBAL(joy1id))) {
 							int count;
@@ -5649,7 +5660,8 @@ void
 CMenuManager::ShutdownJustMenu()
 {
 	// In case we're windowed, keep mouse centered while in game. Done in main.cpp in other conditions.
-#if defined(RW_GL3) && defined(IMPROVED_VIDEOMODE)
+	// No real cursor to manage on Android (LIBRW_SDL2).
+#if defined(RW_GL3) && defined(IMPROVED_VIDEOMODE) && !defined(LIBRW_SDL2)
 	glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 #endif
 	m_bMenuActive = false;
@@ -5758,7 +5770,8 @@ CMenuManager::SwitchMenuOnAndOff()
 		m_bMenuStateChanged = true;
 		
 		// In case we're windowed, keep mouse centered while in game. Done in main.cpp in other conditions.
-#if defined(RW_GL3) && defined(IMPROVED_VIDEOMODE)
+		// No real cursor to manage on Android (LIBRW_SDL2).
+#if defined(RW_GL3) && defined(IMPROVED_VIDEOMODE) && !defined(LIBRW_SDL2)
 		glfwSetInputMode(PSGLOBAL(window), GLFW_CURSOR, m_bMenuActive && m_nPrefsWindowed ? GLFW_CURSOR_HIDDEN : GLFW_CURSOR_DISABLED);
 #endif
 	}

@@ -533,6 +533,9 @@ CMouseControllerState CMousePointerStateHelper::GetMouseSetUp()
 			state.WHEELUP = true;
 		}
 	}
+#elif defined LIBRW_SDL2
+	// No real mouse on Android -- leave every button unbound, same as the
+	// "no mouse found" outcome on desktop.
 #else
 	// It seems there is no way to get number of buttons on mouse, so assign all buttons if we have mouse.
 	double xpos = 1.0f, ypos;
@@ -592,6 +595,11 @@ void CPad::UpdateMouse()
 			NewMouseControllerState = PCTempMouseControllerState;
 		}
 	}
+#elif defined LIBRW_SDL2
+	// No real mouse on Android -- the menu "mouse" driven by the on-screen
+	// touch controls goes through CPad::NewMouseControllerState directly
+	// (CaptureTouchPad() in skel/sdl2/sdl2.cpp), bypassing this function
+	// entirely, so there's nothing for it to poll here.
 #else
 	if ( IsForegroundApp() && PSGLOBAL(cursorIsInWindow) )
 	{

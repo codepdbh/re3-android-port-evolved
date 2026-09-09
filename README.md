@@ -1,206 +1,135 @@
 <img src="https://github.com/GTAmodding/re3/blob/master/res/images/logo_1024.png?raw=true" alt="re3 logo" width="200">
 
-[![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2FGTAmodding%2Fre3%2Fbadge%3Fref%3Dmaster&style=flat)](https://actions-badge.atrox.dev/GTAmodding/re3/goto?ref=master)
-<a href="https://discord.gg/RFNbjsUMGg"><img src="https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat" /></a>
+# RE3 Android Evolved
 
 ## Intro
 
-In this repository you'll find the fully reversed source code for GTA III ([master](https://github.com/GTAmodding/re3/tree/master/) branch) and GTA VC ([miami](https://github.com/GTAmodding/re3/tree/miami/) branch).
+En este repositorio vas a encontrar el código fuente completamente reversado de GTA III, con un port a Android completo y jugable agregado en este fork.
 
-It has been tested and works on Windows, Linux, MacOS and FreeBSD, on x86, amd64, arm and arm64.\
-Rendering is handled either by original RenderWare (D3D8)
-or the reimplementation [librw](https://github.com/aap/librw) (D3D9, OpenGL 2.1 or above, OpenGL ES 2.0 or above).\
-Audio is done with MSS (using dlls from original GTA) or OpenAL.
+re3 (el proyecto original, [GTAmodding/re3](https://github.com/GTAmodding/re3)) fue dado de baja por DMCA en 2021; este fork parte de [mrxenginner/re3](https://github.com/mrxenginner/re3), un mirror preservado del código.
 
-The project has also been ported to the [Nintendo Switch](https://github.com/AGraber/re3-nx/),
-[Playstation Vita](https://github.com/Rinnegatamante/re3) and
-[Nintendo Wii U](https://github.com/GaryOderNichts/re3-wiiu/).
+Funciona en Windows, Linux, MacOS, FreeBSD y **Android** (este fork), en x86, amd64, arm y arm64.\
+El renderizado lo maneja [librw](https://github.com/aap/librw) (D3D9, OpenGL 2.1+, OpenGL ES 2.0+), la reimplementación open-source de RenderWare.\
+El audio funciona con OpenAL.
 
-We cannot build for PS2 or Xbox yet. If you're interested in doing so, get in touch with us.
+## 📱 Sobre este fork: RE3 Android Evolved
+
+Este fork es hermano de [revc-android-port-evolved](https://github.com/codepdbh/revc-android-port-evolved) (el mismo trabajo, para GTA Vice City) — misma metodología, mismo autor.
+
+A diferencia de reVC, este repositorio (re3) **no tenía ningún soporte de Android previo, en ningún lado** — ni siquiera un esqueleto parcial. Todo lo que hay en `android/`, `cmake/android/`, `src/skel/android/` y `src/skel/sdl2/` fue portado desde cero, usando revc-android-port-evolved como plantilla y adaptando cada pieza línea por línea contra el código real de este repo (que en varios archivos compartidos seguía siendo GLFW-only, sin la rama SDL2 que reVC ya tenía).
+
+**Estado actual: ✅ jugable de punta a punta.** Compila, instala, arranca, carga los assets, el menú principal responde al tacto (scroll y confirmación), se puede iniciar partida nueva, conducir, disparar y el HUD/radar se ve correcto. Ver capturas abajo y la sección de pendientes para lo que falta pulir.
+
+### ✅ Arreglos aplicados
+
+**Build / compilación**
+- `android/launcher/`: proyecto Gradle + CMake completo desde cero (no existía).
+- `cmake/android/AndroidConfig.cmake`: conecta los binarios prebuilt de SDL2/OpenAL/mpg123 por ABI a los mismos `find_package()` que usan los builds de escritorio vía Conan. También fuerza `LIBRW_PLATFORM=GL3` y `LIBRW_GL3_GFXLIB=SDL2` en librw (por defecto no tienen equivalente para Android).
+- `vendor/librw` re-apuntado a [codepdbh/librw-re3-android](https://github.com/codepdbh/librw-re3-android) (rama `android-sdl2-fixes`): librw nunca había compilado su backend SDL2 para Android — `find_package(OpenGL)` no tiene rama Android (linkeado directo a GLESv3+EGL en su lugar) y `DEVICEGETNUMSUBSYSTEMS`/`DEVICEGETCURRENTSUBSYSTEM`/etc. estaban sin implementar para SDL2 (`assert(0)` en cada arranque — `psSelectDevice()` los consulta siempre).
+- `src/CMakeLists.txt`: lib compartida (no ejecutable) en Android, `ANDROID_x32` por ABI, todos los defines que el código espera (`ANDROID`, `RW_GL3`, `LIBRW_SDL2`, etc.).
+- `src/skel/crossplatform.h`, `core/Pad.cpp`, `core/Frontend.cpp`, `core/ControllerConfig.cpp`: a diferencia de reVC, ninguno de estos tenía una rama `LIBRW_SDL2` — usaban GLFW sin condicional (`GLFWwindow*` a secas, `GLFW_MOUSE_BUTTON_*`, `glfwGetCursorPos()` directo). Agregadas las ramas SDL2 que faltaban.
+
+**Assets / almacenamiento**
+- `GameActivity.getArguments()` pasa `--dir` apuntando a `Almacenamiento interno/re3GTA`, pide "Todos los archivos" (`MANAGE_EXTERNAL_STORAGE`) en runtime si falta.
+- `main()` (sdl2.cpp) hace `chdir()` a esa carpeta apenas parsea `--dir` — el motor entero resuelve rutas relativas contra el directorio de trabajo, que en Android no tiene ningún valor útil por defecto.
+- `casepath()` (crossplatform.cpp, el resolvedor de rutas case-insensitive): abría `opendir("/")` para cualquier ruta absoluta — Android no lo permite aunque tengas el permiso de almacenamiento. Ahora ancla la resolución en `StorageRootBuffer` (la ruta real y fija de la carpeta del juego) en vez de en `getcwd()`, que era inestable: cada vez que `CFileMgr::SetDir()` cambiaba de subcarpeta y volvía a la raíz, el directorio de trabajo quedaba pegado en la subcarpeta anterior y todas las cargas relativas posteriores fallaban — esto era la causa real de lo que parecía un cuelgue nativo indefinido al arrancar (en realidad `CTxdStore::LoadTxd` reintentando para siempre un `open()` que nunca iba a funcionar).
+- `TxdStore.cpp`: el reintento de carga de texturas ahora tiene un límite (1000 intentos) en Android en vez de ser infinito, para que un archivo realmente corrupto/faltante falle con un log en vez de trabar el hilo.
+- `CdStream_posix.cpp`: sacado `O_NOATIME` en Android — requiere ser dueño del archivo, y los archivos del juego llegan copiados por otro proceso (adb push, gestor de archivos, MTP por USB), así que siempre fallaba con EPERM.
+- `re3.ini` (mINI::INIFile) era un global no-lazy construido con ruta relativa antes de que `--dir` se parsee — ahora es lazy (`GetIniFile()`), se construye recién en el primer uso real.
+- `USE_UNNAMED_SEM` ahora también cubre Android (antes solo Switch) — bionic no soporta semáforos con nombre (`sem_open()` siempre falla), abortaba en el primer streaming thread.
+- Bug de concatenación sin `/` en la ruta de `gamecontrollerdb.txt` (mismo tipo de bug que reVC tenía en su logger).
+
+**Controles táctiles**
+Port completo de la arquitectura de reVC (`TouchControls.h/.cpp`, `TouchControlsView.java`, `CaptureTouchPad()`/`CapturePad()`), pero con la semántica de botones re-verificada contra los bindings reales de GTA III (no asumida igual a reVC):
+- III no tiene celular — el botón L1 en el layout "a pie" es "centrar cámara detrás del jugador" (CAM), no "atender teléfono" como en reVC.
+- `MapIdToButtonId()` en este repo switchea sobre el orden ordinal de GLFW (nunca tuvo backend SDL2 propio), no sobre `SDL_CONTROLLER_BUTTON_*` como en reVC. `CaptureTouchPad()`/`CapturePad()` usan un enum `GAME_BTN_*` que respeta ese orden GLFW en vez de reusar los índices SDL2 de reVC directamente.
+- `InitDefaultControlConfigJoyPad(16)` llamado una vez al arrancar si hace falta (mismo fix que reVC necesitó, mismo motivo: solo se dispara con un gamepad físico conectado).
+- **Menú táctil**: tocar una opción ahora la resalta Y la confirma correctamente. `CMenuManager::ProcessButtonPresses()` lee el estado de hover un frame antes de que `Draw()` lo recalcule para la posición actual — un mouse real no lo nota (descansa varios frames sobre el botón antes del clic), pero un toque aparece ya posicionado sobre el botón desde el primer frame. Se retrasa un frame la confirmación del tap (no la posición) para darle tiempo a `Draw()` de calcular el hover correcto antes de leerlo.
+
+**Radar / HUD**
+- Radar reposicionado arriba-izquierda (`RADAR_TOP`) en `Radar.cpp` y `Hud.cpp` — el stick de movimiento está abajo-izquierda y lo tapaba.
+
+**Apuntado / target-lock**
+- `CCamera::m_bUseMouse3rdPerson` (default `true`, "cámara con mouse en 3ra persona") bloqueaba `FindWeaponLockOnTarget()` por completo — sin mouse en Android, quedaba permanentemente en `true`. Arreglo puntual (variable local, solo dentro de `ProcessPlayerWeapon()`, solo Android) sin tocar la bandera global (también maneja la cámara con stick en otros archivos).
+
+### 📋 Pendientes
+
+- Probado a fondo solo en un dispositivo (Adreno clase Snapdragon 8 Elite, Android 16) — falta feedback de otras GPUs/versiones de Android.
+- R3 (mirar atrás / alternar sumisiones) no tiene botón táctil propio en el layout actual (mismo gap que reVC).
+- Sin editor de layout en vivo todavía (reVC sí lo tiene) — se podría portar directamente.
+- Libs vendored (SDL2/OpenAL/mpg123) no están alineadas a 16KB de página (Android 15+ lo pide para APKs nuevos) — hoy es solo una advertencia de compatibilidad, no bloquea instalación.
+- Seguir jugando para encontrar bugs específicos de Android que todavía no aparecieron en las pruebas.
 
 ## Installation
 
-- re3 requires PC game assets to work, so you **must** own [a copy of GTA III](https://store.steampowered.com/app/12100/Grand_Theft_Auto_III/).
-- Build re3 or download the latest build:
-  - [Windows D3D9 MSS 32bit](https://nightly.link/GTAmodding/re3/workflows/re3_msvc_x86/master/re3_Release_win-x86-librw_d3d9-mss.zip)
-  - [Windows D3D9 64bit](https://nightly.link/GTAmodding/re3/workflows/re3_msvc_amd64/master/re3_Release_win-amd64-librw_d3d9-oal.zip)
-  - [Windows OpenGL 64bit](https://nightly.link/GTAmodding/re3/workflows/re3_msvc_amd64/master/re3_Release_win-amd64-librw_gl3_glfw-oal.zip)
-  - [Linux 64bit](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/ubuntu-18.04-gl3.zip)
-  - [MacOS 64bit x86-64](https://nightly.link/GTAmodding/re3/workflows/build-cmake-conan/master/macos-latest-gl3.zip)
-- Extract the downloaded zip over your GTA 3 directory and run re3. The zip includes the binary, updated and additional gamefiles and in case of OpenAL the required dlls.
+- re3 requiere los assets originales del juego — necesitás tener [una copia de GTA III](https://store.steampowered.com/app/12100/Grand_Theft_Auto_III/) legítima.
+- **Android**: instalá el APK (ver [Releases](../../releases)), copiá los archivos del juego a `Almacenamiento interno/re3GTA`, concedé el permiso "Todos los archivos" cuando se pida.
+- **PC**: compilá desde código fuente (ver más abajo) o descargá un build de [GTAmodding/re3](https://github.com/GTAmodding/re3) (el proyecto original, con builds automatizados para Windows/Linux/MacOS).
 
 ## Screenshots
 
-![re3 2021-02-11 22-57-03-23](https://user-images.githubusercontent.com/1521437/107704085-fbdabd00-6cbc-11eb-8406-8951a80ccb16.png)
-![re3 2021-02-11 22-43-44-98](https://user-images.githubusercontent.com/1521437/107703339-cbdeea00-6cbb-11eb-8f0b-07daa105d470.png)
-![re3 2021-02-11 22-46-33-76](https://user-images.githubusercontent.com/1521437/107703343-cd101700-6cbb-11eb-9ccd-012cb90524b7.png)
-![re3 2021-02-11 22-50-29-54](https://user-images.githubusercontent.com/1521437/107703348-d00b0780-6cbb-11eb-8afd-054249c2b95e.png)
+<p float="left">
+  <img src="docs/screenshot_driving.png" width="420" alt="Conduciendo en re3 Android">
+  <img src="docs/screenshot_menu.png" width="420" alt="Menú principal táctil en re3 Android">
+</p>
 
 ## Improvements
 
-We have implemented a number of changes and improvements to the original game.
-They can be configured in `core/config.h`.
-Some of them can be toggled at runtime, some cannot.
+Los mismos cambios y mejoras del re3 original (configurables en `core/config.h`):
 
-* Fixed a lot of smaller and bigger bugs
-* User files (saves and settings) stored in GTA root directory
-* Settings stored in re3.ini file instead of gta3.set
-* Debug menu to do and change various things (Ctrl-M to open)
-* Debug camera (Ctrl-B to toggle)
-* Rotatable camera
-* XInput controller support (Windows)
-* No loading screens between islands ("map memory usage" in menu)
-* Skinned ped support (models from Xbox or Mobile)
-* Rendering
-  * Widescreen support (properly scaled HUD, Menu and FOV)
-  * PS2 MatFX (vehicle reflections)
-  * PS2 alpha test (better rendering of transparency)
-  * PS2 particles
-  * Xbox vehicle rendering
-  * Xbox world lightmap rendering (needs Xbox map)
-  * Xbox ped rim light
-  * Xbox screen rain droplets
-  * More customizable colourfilter
-* Menu
-  * Map
-  * More options
-  * Controller configuration menu
-  * ...
-* Can load DFFs and TXDs from other platforms, possibly with a performance penalty
-* ...
+* Muchos bugs grandes y chicos arreglados
+* Archivos de usuario (guardados y configuración) en la carpeta raíz del juego
+* Configuración en `re3.ini` en vez de `gta3.set`
+* Menú de debug (Ctrl-M)
+* Cámara de debug (Ctrl-B)
+* Cámara rotable
+* Soporte XInput (Windows)
+* Sin pantallas de carga entre islas
+* Soporte de peds "skinned" (modelos de Xbox/Mobile)
+* Widescreen (HUD, menú y FOV correctamente escalados)
+* MatFX, alpha test, partículas, iluminación y lluvia estilo PS2/Xbox
+* Menú con mapa, más opciones, configuración de controlador
 
-## To-Do
+## Building from Source
 
-The following things would be nice to have/do:
+### Android
 
-* Fix physics for high FPS
-* Improve performance on lower end devices, especially the OpenGL layer on the Raspberry Pi (if you have experience with this, please get in touch)
-* Compare code with PS2 code (tedious, no good decompiler)
-* [PS2 port](https://github.com/GTAmodding/re3/wiki/PS2-port)
-* Xbox port (not quite as important)
-* reverse remaining unused/debug functions
-* compare CodeWarrior build with original binary for more accurate code (very tedious)
+Requisitos: Android SDK + NDK 27.2.12479018, CMake 3.22.1 (instalables vía `sdkmanager`).
 
-## Modding
-
-Asset modifications (models, texture, handling, script, ...) should work the same way as with original GTA for the most part.
-
-CLEO scripts work with [CLEO Redux](https://github.com/cleolibrary/CLEO-Redux).
-
-Mods that make changes to the code (dll/asi, limit adjusters) will *not* work.
-Some things these mods do are already implemented in re3 (much of SkyGFX, GInput, SilentPatch, Widescreen fix),
-others can easily be achieved (increasing limis, see `config.h`),
-others will simply have to be rewritten and integrated into the code directly.
-Sorry for the inconvenience.
-
-## Building from Source  
-
-When using premake, you may want to point GTA_III_RE_DIR environment variable to GTA3 root folder if you want the executable to be moved there via post-build script.
-
-Clone the repository with `git clone --recursive https://github.com/GTAmodding/re3.git`. Then `cd re3` into the cloned repository.
-
-<details><summary>Linux Premake</summary>
-
-For Linux using premake, proceed: [Building on Linux](https://github.com/GTAmodding/re3/wiki/Building-on-Linux)
-
-</details>
-
-<details><summary>Linux Conan</summary>
-
-Install python and conan, and then run build.
 ```
-conan export vendor/librw librw/master@
-mkdir build
-cd build
-conan install .. re3/master@ -if build -o re3:audio=openal -o librw:platform=gl3 -o librw:gl3_gfxlib=glfw --build missing -s re3:build_type=RelWithDebInfo -s librw:build_type=RelWithDebInfo
-conan build .. -if build -bf build -pf package
+git clone --recurse-submodules https://github.com/codepdbh/re3-android-port-evolved.git
+cd re3-android-port-evolved/android/launcher
 ```
-</details>
 
-<details><summary>MacOS Premake</summary>
+Creá `android/launcher/local.properties` con `sdk.dir=<ruta a tu Android SDK>`.
 
-For MacOS using premake, proceed: [Building on MacOS](https://github.com/GTAmodding/re3/wiki/Building-on-MacOS)
+Si tu JDK del sistema es muy nuevo para Gradle 8.11.x, agregá a `android/launcher/gradle.properties` (no lo commitees):
+```
+org.gradle.java.home=<ruta al JBR de Android Studio>
+```
 
-</details>
+Luego:
+```
+./gradlew assembleDebug
+```
 
-<details><summary>FreeBSD</summary>
+El APK queda en `android/launcher/app/build/outputs/apk/debug/`.
 
-For FreeBSD using premake, proceed: [Building on FreeBSD](https://github.com/GTAmodding/re3/wiki/Building-on-FreeBSD)
+### PC (Windows / Linux / MacOS / FreeBSD)
 
-</details>
-
-<details><summary>Windows</summary>
-
-Assuming you have Visual Studio 2015/2017/2019:
-- Run one of the `premake-vsXXXX.cmd` variants on root folder.
-- Open build/re3.sln with Visual Studio and compile the solution.
-
-Microsoft recently discontinued its downloads of the DX9 SDK. You can download an archived version here: https://archive.org/details/dxsdk_jun10
-
-**If you choose OpenAL on Windows** You must read [Running OpenAL build on Windows](https://github.com/GTAmodding/re3/wiki/Running-OpenAL-build-on-Windows).
-</details>
-
-> :information_source: premake has an `--with-lto` option if you want the project to be compiled with Link Time Optimization.
-
-> :information_source: There are various settings in [config.h](https://github.com/GTAmodding/re3/tree/master/src/core/config.h), you may want to take a look there.
-
-> :information_source: re3 uses completely homebrew RenderWare-replacement rendering engine; [librw](https://github.com/aap/librw/). librw comes as submodule of re3, but you also can use LIBRW enviorenment variable to specify path to your own librw.
-
-If you feel the need, you can also use CodeWarrior 7 to compile re3 using the supplied codewarrior/re3.mcp project - this requires the original RW33 libraries, and the DX8 SDK. The build is unstable compared to the MSVC builds though, and is mostly meant to serve as a reference.
+Ver las instrucciones del [re3 original](https://github.com/GTAmodding/re3#building-from-source) — sin cambios en este fork para esas plataformas.
 
 ## Contributing
-As long as it's not linux/cross-platform skeleton/compatibility layer, all of the code on the repo that's not behind a preprocessor condition(like FIX_BUGS) are **completely** reversed code from original binaries.  
 
-We **don't** accept custom codes, as long as it's not wrapped via preprocessor conditions, or it's linux/cross-platform skeleton/compatibility layer.
+Este fork sigue las mismas reglas de contribución que el re3 original — ver [CODING_STYLE.md](CODING_STYLE.md). Los cambios específicos de Android están detrás de `#if defined ANDROID` en todos lados, no afectan el resto de las plataformas.
 
-We accept only these kinds of PRs;
+## Apoyá el proyecto
 
-- A new feature that exists in at least one of the GTAs (if it wasn't in III/VC then it doesn't have to be decompilation)  
-- Game, UI or UX bug fixes (if it's a fix to original code, it should be behind FIX_BUGS)
-- Platform-specific and/or unused code that's not been reversed yet
-- Makes reversed code more understandable/accurate, as in "which code would produce this assembly".
-- A new cross-platform skeleton/compatibility layer, or improvements to them
-- Translation fixes, for languages original game supported
-- Code that increase maintainability  
-
-We have a [Coding Style](https://github.com/GTAmodding/re3/blob/master/CODING_STYLE.md) document that isn't followed or enforced very well.
-
-Do not use features from C++11 or later.
-
-
-## History
-
-re3 was started sometime in the spring of 2018,
-initially as a way to test reversed collision and physics code
-inside the game.
-This was done by replacing single functions of the game
-with their reversed counterparts using a dll.
-
-After a bit of work the project lay dormant for about a year
-and was picked up again and pushed to github in May 2019.
-At the time I (aap) had reversed around 10k lines of code and estimated
-the final game to have around 200-250k.
-Others quickly joined the effort (Fire_Head, shfil, erorcun and Nick007J
-in time order, and Serge a bit later) and we made very quick progress
-throughout the summer of 2019
-after which the pace slowed down a bit.
-
-Due to everyone staying home during the start of the Corona pandemic
-everybody had a lot of time to work on re3 again and
-we finally got a standalone exe in April 2020 (around 180k lines by then).
-
-After the initial excitement and fixing and polishing the code further,
-reVC was started in early May 2020 by starting from re3 code,
-not by starting from scratch replacing functions with a dll.
-After a few months of mostly steady progress we considered reVC
-finished in December.
-
-Since then we have started reLCS, which is currently work in progress.
-
+Si te sirvió este port, suscribite al canal de YouTube y dejá una ⭐ en el repositorio — ayuda un montón a que más gente lo encuentre.
 
 ## License
 
-We don't feel like we're in a position to give this code a license.\
-The code should only be used for educational, documentation and modding purposes.\
-We do not encourage piracy or commercial use.\
-Please keep derivate work open source and give proper credit.
+No estamos en posición de darle una licencia a este código.\
+Debe usarse solo con fines educativos, de documentación y de modding.\
+No fomentamos la piratería ni el uso comercial.\
+Por favor mantené el trabajo derivado open source y dale crédito apropiado.

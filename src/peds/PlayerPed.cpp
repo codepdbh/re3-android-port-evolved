@@ -1011,6 +1011,19 @@ void
 CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
 {
 	CWeaponInfo *weaponInfo = CWeaponInfo::GetWeaponInfo(GetWeapon()->m_eWeaponType);
+#if defined ANDROID
+	// CCamera::m_bUseMouse3rdPerson defaults to true and normally means "the
+	// player is aiming the camera with a mouse in 3rd person" -- the checks
+	// below use it to mean "so don't also auto-lock a target, that'd fight
+	// the mouse aim". There's no mouse on Android, so within this function
+	// it should always read as false. It's also read by Cam.cpp/Bike.cpp/
+	// Automobile.cpp for the stick-driven look camera though, so the real
+	// static flag can't just be forced off globally -- used in place of
+	// CCamera::m_bUseMouse3rdPerson at every read below instead.
+	const bool bUsingMouse3rdPerson = false;
+#else
+	const bool &bUsingMouse3rdPerson = CCamera::m_bUseMouse3rdPerson;
+#endif
 	if (m_bHasLockOnTarget && !m_pPointGunAt) {
 		TheCamera.ClearPlayerWeaponMode();
 		CWeaponEffects::ClearCrossHair();
@@ -1160,9 +1173,9 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
 			// what??
 			if (!m_pPointGunAt
 #ifdef FREE_CAM
-				|| (!CCamera::bFreeCam && CCamera::m_bUseMouse3rdPerson)
+				|| (!CCamera::bFreeCam && bUsingMouse3rdPerson)
 #else
-				|| CCamera::m_bUseMouse3rdPerson
+				|| bUsingMouse3rdPerson
 #endif
 				|| m_pPointGunAt->IsPed() && ((CPed*)m_pPointGunAt)->bInVehicle) {
 				ClearWeaponTarget();
@@ -1182,9 +1195,9 @@ CPlayerPed::ProcessPlayerWeapon(CPad *padUsed)
 			TheCamera.UpdateAimingCoors(m_pPointGunAt->GetPosition());
 		}
 #ifdef FREE_CAM
-		else if ((CCamera::bFreeCam && weaponInfo->m_eWeaponFire == WEAPON_FIRE_MELEE) || (weaponInfo->IsFlagSet(WEAPONFLAG_CANAIM) && !CCamera::m_bUseMouse3rdPerson)) {
+		else if ((CCamera::bFreeCam && weaponInfo->m_eWeaponFire == WEAPON_FIRE_MELEE) || (weaponInfo->IsFlagSet(WEAPONFLAG_CANAIM) && !bUsingMouse3rdPerson)) {
 #else
-		else if (weaponInfo->IsFlagSet(WEAPONFLAG_CANAIM) && !CCamera::m_bUseMouse3rdPerson) {
+		else if (weaponInfo->IsFlagSet(WEAPONFLAG_CANAIM) && !bUsingMouse3rdPerson) {
 #endif
 			if (padUsed->TargetJustDown())
 				FindWeaponLockOnTarget();

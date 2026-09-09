@@ -1,5 +1,6 @@
 #include "common.h"
 #include "crossplatform.h"
+#include "FileMgr.h"
 
 // Codes compatible with Windows and Linux
 #ifndef _WIN32
@@ -91,7 +92,16 @@ void GetDateFormat(int unused1, int unused2, SYSTEMTIME* in, int unused3, char* 
 	linuxTime.tm_hour = in->wHour;
 	linuxTime.tm_min = in->wMinute;
 	linuxTime.tm_sec = in->wSecond;
+#if defined ANDROID
+	// Bionic (Android's libc) doesn't implement nl_langinfo()/langinfo.h at
+	// all -- there's no locale database to query on-device. Fall back to a
+	// fixed format; this only affects savegame/UI date strings, matching the
+	// same "en_US" %m/%d/%y default this would get from D_FMT on a system
+	// with the C/POSIX locale anyway.
+	strftime(out, size, "%m/%d/%y", &linuxTime);
+#else
 	strftime(out, size, nl_langinfo(D_FMT), &linuxTime);
+#endif
 }
 
 void FileTimeToSystemTime(time_t* writeTime, SYSTEMTIME* out) {
@@ -189,7 +199,16 @@ char* casepath(char const* path, bool checkPathFirst)
 
     size_t l = strlen(path);
     char* p = (char*)alloca(l + 1);
+#if defined ANDROID
+    // out gets StorageRootBuffer copied into it up front on Android (see
+    // below) instead of starting from "./" -- needs room for that too, not
+    // just the original path's own length.
+    extern char* StorageRootBuffer;
+    size_t androidRootLen = StorageRootBuffer != nullptr ? strlen(StorageRootBuffer) : 0;
+    char* out = (char*)malloc(l + androidRootLen + 3);
+#else
     char* out = (char*)malloc(l + 3); // for extra ./
+#endif
     strcpy(p, path);
 
     // my addon: linux doesn't handle filenames with spaces at the end nicely
@@ -200,6 +219,48 @@ char* casepath(char const* path, bool checkPathFirst)
     DIR* d;
     char* c;
 
+#if defined ANDROID
+    // Every path this function ever receives is CFileMgr::ms_rootDirName
+    // (captured from getcwd() right after main() chdir()'d into
+    // StorageRootBuffer -- see psInitialize() in skel/sdl2/sdl2.cpp) plus a
+    // relative tail -- unconditionally, not just for absolute paths: an
+    // opendir("/") for those (the branch below would otherwise take) is
+    // denied by Android's app sandboxing regardless of the
+    // MANAGE_EXTERNAL_STORAGE grant (that only covers
+    // /storage/emulated/0/..., not the device root), which crashed every
+    // such call with a NULL DIR*. strstr() (not strncmp() from the start)
+    // because ms_rootDirName can appear anywhere in the string it's built
+    // into (e.g. CFileMgr::ms_dirName = ms_rootDirName + "TEXT\\").
+    //
+    // Walk from StorageRootBuffer (the real, fixed, absolute root),
+    // producing an ABSOLUTE corrected path -- not from getcwd() and not a
+    // "./"-relative one. This part is NOT what an earlier version of this
+    // fix (ported from reVC's own casepath(), which does use getcwd()) did,
+    // and that turned out to matter: getcwd() is only "root" the first time
+    // this runs. The very next call after CFileMgr::SetDir("TEXT") set cwd
+    // to .../TEXT, this same function is asked to resolve
+    // CFileMgr::SetDir("")'s reset back to root -- i.e. ms_rootDirName
+    // itself. strstr() finds ms_rootDirName as a prefix of itself, strips
+    // it, and leaves p empty; with the getcwd()-based version that made
+    // mychdir() run chdir("./") -- a no-op *relative to whatever cwd already
+    // was* (.../TEXT, not root) -- so cwd stayed stuck in TEXT/ forever
+    // after. Every subsequent unrelated relative load (e.g.
+    // CTxdStore::LoadTxd() opening "MODELS/FONTS.TXD" right after) then
+    // resolved from .../TEXT/MODELS/... instead of the real .../MODELS/...,
+    // failed, and spun forever in that call's own unbounded
+    // do-while(stream==nil) retry loop (TxdStore.cpp) -- the actual hang.
+    // Anchoring on StorageRootBuffer instead of getcwd() sidesteps the
+    // problem entirely: the result no longer depends on what cwd happened
+    // to be when this call started.
+    char* pos = strstr(p, CFileMgr::GetRootDirName());
+    if (pos != NULL) {
+        pos += strlen(CFileMgr::GetRootDirName());
+        p = pos;
+    }
+    d = opendir(StorageRootBuffer);
+    strcpy(out, StorageRootBuffer);
+    rl = strlen(StorageRootBuffer);
+#else
     #if defined(__SWITCH__) || defined(PSP2)
     if( (c = strstr(p, ":/")) != NULL) // scheme used by some environments, eg. switch, vita
     {
@@ -223,6 +284,7 @@ char* casepath(char const* path, bool checkPathFirst)
         out[1] = 0;
         rl = 1;
     }
+#endif
 
     bool cantProceed = false; // just convert slashes in what's left in string, don't correct case of letters(because we can't)
     bool mayBeTrailingSlash = false;

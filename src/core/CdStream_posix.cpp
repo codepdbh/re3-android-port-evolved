@@ -22,6 +22,9 @@
 
 #include "CdStream.h"
 #include "MemoryMgr.h"
+#if defined ANDROID
+#include "logger/log.h"
+#endif
 
 #define CDDEBUG(f, ...)   debug ("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
 #define CDTRACE(f, ...)   printf("%s: " f "\n", "cdvd_stream", ## __VA_ARGS__)
@@ -206,9 +209,15 @@ CdStreamInit(int32 numChannels)
 		ASSERT(0);
 		return;
 	}
-#ifdef __linux__
+#if defined(__linux__) && !defined(ANDROID)
 	_gdwCdStreamFlags = O_RDONLY | O_NOATIME;
 #else
+	// O_NOATIME requires the opening process to own the file (or
+	// CAP_FOWNER) -- on Android the game files are practically always
+	// copied in by some *other* process (adb push, a file manager, USB MTP),
+	// so this app doesn't "own" them in the Unix sense even with full
+	// storage access granted, and every open() with O_NOATIME here failed
+	// with EPERM (confirmed via logging: CdStreamAddImage on MODELS/GTA3.IMG).
 	_gdwCdStreamFlags = O_RDONLY;
 #endif
 	// People say it's slower
@@ -552,6 +561,9 @@ CdStreamAddImage(char const *path)
 	}
 
 	if ( gImgFiles[gNumImages] == -1 ) {
+#if defined ANDROID
+		Logger::Log("CdStreamAddImage: failed to open '%s' (errno=%d)", path, errno);
+#endif
 		assert(false);
 		return false;
 	}

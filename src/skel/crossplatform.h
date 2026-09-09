@@ -61,7 +61,11 @@ int _caserename(const char *old_filename, const char *new_filename);
 #ifdef RW_GL3
 typedef struct
 {
+#if defined LIBRW_SDL2
+    struct SDL_Window* window;
+#else
     GLFWwindow* window;
+#endif
     RwBool		fullScreen;
     RwV2d		lastMousePos;
     double      mouseWheel; // glfw doesn't cache it

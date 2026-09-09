@@ -184,8 +184,28 @@ CustomFrontendOptionsPopulate(void)
 #define MINI_CASE_SENSITIVE
 #include "ini.h"
 
-mINI::INIFile ini("re3.ini");
 mINI::INIStructure cfg;
+
+// mINI::INIFile used to be a plain global constructed with the bare relative
+// filename "re3.ini" -- fine on desktop (the process's cwd is already the
+// game folder there), but on Android that resolves against "/" (not
+// writable) *and*, being a global, the constructor runs during static init,
+// before main() has parsed "--dir" and set StorageRootBuffer (skel/sdl2/sdl2.cpp)
+// -- so even fixing the path here wouldn't help a non-lazy global. Building
+// it lazily, on first real use (LoadINISettings()/SaveINISettings(), always
+// called well after StorageRootBuffer is set), sidesteps both problems.
+mINI::INIFile &GetIniFile()
+{
+#if defined ANDROID
+	extern char* StorageRootBuffer;
+	static char path[512];
+	snprintf(path, sizeof(path), "%s/re3.ini", StorageRootBuffer);
+	static mINI::INIFile ini(path);
+#else
+	static mINI::INIFile ini("re3.ini");
+#endif
+	return ini;
+}
 
 bool ReadIniIfExists(const char *cat, const char *key, uint32 *out)
 {
@@ -466,12 +486,12 @@ void SaveINIControllerSettings()
 #endif
 	StoreIni("Controller", "PadButtonsInited", ControlsManager.ms_padButtonsInited);
 
-	ini.write(cfg);
+	GetIniFile().write(cfg);
 }
 
 bool LoadINISettings()
 {
-	if (!ini.read(cfg))
+	if (!GetIniFile().read(cfg))
 		return false;
 
 #ifdef IMPROVED_VIDEOMODE
@@ -656,7 +676,7 @@ void SaveINISettings()
 	}
 #endif
 
-	ini.write(cfg);
+	GetIniFile().write(cfg);
 }
 
 #endif
