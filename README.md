@@ -1,4 +1,4 @@
-<img src="https://github.com/GTAmodding/re3/blob/master/res/images/logo_1024.png?raw=true" alt="re3 logo" width="200">
+<img src="docs/app_icon.png" alt="RE3 Android Evolved icon" width="150">
 
 # RE3 Android Evolved
 
