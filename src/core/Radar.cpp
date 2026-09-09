@@ -1423,7 +1423,11 @@ void CRadar::TransformRadarPointToScreenSpace(CVector2D &out, const CVector2D &i
 #else
 		out.x = (in.x + 1.0f) * 0.5f * SCREEN_SCALE_X(RADAR_WIDTH) + RADAR_LEFT;
 #endif
+#if defined ANDROID
+		out.y = (1.0f - in.y) * 0.5f * SCREEN_SCALE_Y(RADAR_HEIGHT) + SCREEN_SCALE_Y(RADAR_TOP);
+#else
 		out.y = (1.0f - in.y) * 0.5f * SCREEN_SCALE_Y(RADAR_HEIGHT) + SCREEN_SCALE_FROM_BOTTOM(RADAR_BOTTOM + RADAR_HEIGHT);
+#endif
 	}
 }
 

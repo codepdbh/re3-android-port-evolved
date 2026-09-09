@@ -1423,19 +1423,6 @@ main(int argc, char *argv[])
     /*
      * Initialize the 3D (RenderWare) components of the app...
      */
-    // KNOWN ISSUE (Android): on at least one tested device (Snapdragon 8
-    // Elite-class Adreno GPU, Android 16), this call never returns -- the
-    // SDLThread stays alive and busy (confirmed via /proc/<pid>/task/<tid>/stat,
-    // no crash) forever. Every stage INSIDE RsRwInitialize() (skeleton.cpp) --
-    // window/EGL/GL context creation (startSDL2()), glad loading, and
-    // initOpenGL() (vendor/librw/src/gl/gl3device.cpp) -- was individually
-    // confirmed to complete successfully via temporary __android_log_print
-    // breadcrumbs; the hang is specifically in the return path from
-    // RsRwInitialize() back to here, with no further function calls of our
-    // own in between. Not yet root-caused -- couldn't get a native backtrace
-    // of the stuck thread without root (debuggerd requires it on this
-    // device). Worth checking with `adb shell getprop ro.build.version.release`
-    // / a different device, or attaching ndk-gdb/systrace if available.
     if( rsEVENTERROR == RsEventHandler(rsRWINITIALIZE, &openParams) )
     {
         RsEventHandler(rsTERMINATE, nil);
@@ -1999,14 +1986,45 @@ void CaptureTouchPad(RwInt32 padID)
 
     // Frontend menus support real mouse hover/click (see cursorCB() above for
     // the desktop equivalent this mirrors); let a tap on a menu item work
-    // directly, not just the D-Pad. UpdateMouse() (called earlier this same
-    // frame, before CapturePad()) already overwrote these from the -- empty,
-    // since touches don't reach SDL's own mouse emulation here -- real mouse
-    // state, so it's safe to override them again right here.
+    // directly, not just the D-Pad. UpdateMouse() is a no-op on Android (no
+    // real mouse to poll), which means it never does the Old<-New copy a
+    // real frame normally would -- without doing it here instead,
+    // OldMouseControllerState.LMB never became true, so
+    // GetLeftMouseJustDown() (NewMouseControllerState.LMB &&
+    // !OldMouseControllerState.LMB) read true on *every* frame a finger
+    // stayed down, not just the first -- a single tap spanning a few frames
+    // fired the same menu click repeatedly, each one potentially landing on
+    // a different screen the previous click had already navigated to.
+    //
+    // That alone still left taps unable to actually CONFIRM an option
+    // (hovering/dragging worked, a plain tap didn't): CMenuManager::Process()
+    // calls ProcessButtonPresses() -- which reads GetLeftMouseJustDown() and
+    // m_nHoverOption -- BEFORE Draw() runs and recomputes m_nHoverOption for
+    // the CURRENT m_nMousePosX/Y (see the hover-scan loop in Draw()).
+    // m_nHoverOption used by ProcessButtonPresses() this frame is therefore
+    // always the PREVIOUS frame's hover result. A real mouse doesn't notice:
+    // it rests on top of a button for many frames before it's clicked, so by
+    // the time of the click m_nHoverOption has long since caught up. A touch
+    // has no such "resting" period -- the very first frame it exists, its
+    // position already jumped straight onto the button, so on that same
+    // frame m_nHoverOption is still whatever it was before the touch began
+    // (usually HOVEROPTION_NOT_HOVERING), and GetLeftMouseJustDown() fires
+    // against that stale, wrong hover state.
+    //
+    // Fix: delay LMB going true by one frame on a fresh touch-down. The
+    // position is still applied immediately, so Draw() gets a chance to
+    // compute the correct m_nHoverOption for it before ProcessButtonPresses()
+    // ever sees LMB true for this tap.
+    static bool s_wasTouchDown = false;
     if (FrontEndMenuManager.m_bMenuActive) {
+        bool rawDown = g_TouchState.menuMouseDown;
+        CPad::OldMouseControllerState.LMB = CPad::NewMouseControllerState.LMB;
         FrontEndMenuManager.m_nMouseTempPosX = (int32)g_TouchState.menuMouseX;
         FrontEndMenuManager.m_nMouseTempPosY = (int32)g_TouchState.menuMouseY;
-        CPad::NewMouseControllerState.LMB = g_TouchState.menuMouseDown;
+        CPad::NewMouseControllerState.LMB = rawDown && s_wasTouchDown;
+        s_wasTouchDown = rawDown;
+    } else {
+        s_wasTouchDown = false;
     }
 
     // This is the step the very first version of this function was missing:
