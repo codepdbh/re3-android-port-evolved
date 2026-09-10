@@ -45,6 +45,12 @@ Port completo de la arquitectura de reVC (`TouchControls.h/.cpp`, `TouchControls
 - `MapIdToButtonId()` en este repo switchea sobre el orden ordinal de GLFW (nunca tuvo backend SDL2 propio), no sobre `SDL_CONTROLLER_BUTTON_*` como en reVC. `CaptureTouchPad()`/`CapturePad()` usan un enum `GAME_BTN_*` que respeta ese orden GLFW en vez de reusar los índices SDL2 de reVC directamente.
 - `InitDefaultControlConfigJoyPad(16)` llamado una vez al arrancar si hace falta (mismo fix que reVC necesitó, mismo motivo: solo se dispara con un gamepad físico conectado).
 - **Menú táctil**: tocar una opción ahora la resalta Y la confirma correctamente. `CMenuManager::ProcessButtonPresses()` lee el estado de hover un frame antes de que `Draw()` lo recalcule para la posición actual — un mouse real no lo nota (descansa varios frames sobre el botón antes del clic), pero un toque aparece ya posicionado sobre el botón desde el primer frame. Se retrasa un frame la confirmación del tap (no la posición) para darle tiempo a `Draw()` de calcular el hover correcto antes de leerlo.
+- **No se podía pausar manejando.** El botón de pausa (Start) nunca se posicionaba en el layout de vehículo —
+  no faltaba un mapeo, directamente el botón no existía en pantalla mientras conducías (mismo bug que tenía
+  reVC).
+- **El botón de cámara (VISTA/L1 CAM) se superponía al minimapa** y se veía ovalado en vez de redondo (su
+  hitbox era un rectángulo ancho, no un círculo). Movido a un costado, fuera del área del radar, y ahora
+  circular como el resto de los botones.
 
 **Radar / HUD**
 - Radar reposicionado arriba-izquierda (`RADAR_TOP`) en `Radar.cpp` y `Hud.cpp` — el stick de movimiento está abajo-izquierda y lo tapaba.
@@ -52,11 +58,18 @@ Port completo de la arquitectura de reVC (`TouchControls.h/.cpp`, `TouchControls
 **Apuntado / target-lock**
 - `CCamera::m_bUseMouse3rdPerson` (default `true`, "cámara con mouse en 3ra persona") bloqueaba `FindWeaponLockOnTarget()` por completo — sin mouse en Android, quedaba permanentemente en `true`. Arreglo puntual (variable local, solo dentro de `ProcessPlayerWeapon()`, solo Android) sin tocar la bandera global (también maneja la cámara con stick en otros archivos).
 
+### ✨ Mejoras / features nuevas
+
+- **Controles con íconos en vez de texto**: los botones que antes mostraban una palabra en español (CORRER,
+  SALTAR, DISPARAR, SUBIR, SALIR, CAM, APUNTAR, VISTA, GAS, FRENO, FRENO MANO, RADIO, BOCINA) ahora muestran
+  un gráfico propio en su lugar — 12 íconos distintos en total (CAM y VISTA comparten el mismo, ambos son
+  "cámara"), más rápido de reconocer de un vistazo. (III no tiene botón de teléfono, a diferencia de reVC,
+  así que un ícono menos que en el fork hermano.)
+
 ### 📋 Pendientes
 
 - Probado a fondo solo en un dispositivo (Adreno clase Snapdragon 8 Elite, Android 16) — falta feedback de otras GPUs/versiones de Android.
 - R3 (mirar atrás / alternar sumisiones) no tiene botón táctil propio en el layout actual (mismo gap que reVC).
-- Sin editor de layout en vivo todavía (reVC sí lo tiene) — se podría portar directamente.
 - Libs vendored (SDL2/OpenAL/mpg123) no están alineadas a 16KB de página (Android 15+ lo pide para APKs nuevos) — hoy es solo una advertencia de compatibilidad, no bloquea instalación.
 - Seguir jugando para encontrar bugs específicos de Android que todavía no aparecieron en las pruebas.
 

@@ -2,10 +2,13 @@ package com.re3.game;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PointF;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
 import android.os.Handler;
@@ -103,6 +106,7 @@ public class TouchControlsView extends View {
     private static final class Button {
         final int id;
         String label;
+        Bitmap icon; // when set, drawn instead of the plain circle+label (see onDraw)
         RectF hitRect = new RectF();
         boolean roundedRect = false; // vs circle
         int pointerId = -1;
@@ -211,9 +215,35 @@ public class TouchControlsView extends View {
         }
     };
 
+    // Custom artwork for the buttons that used to just show a Spanish word --
+    // each one is a complete button graphic (its own glossy circle/bezel),
+    // so it's drawn in place of our usual fillPaint+strokePaint circle and
+    // label, not on top of it (see onDraw). Loaded once here; buttons.icon
+    // just points at whichever of these applies for the current context.
+    // No phone icon: GTA III has no cellphone mechanic (that's a VC thing).
+    private final Bitmap icRun, icJump, icShoot, icEnterVehicle, icExitVehicle,
+            icAim, icCamera, icAccelerate, icBrake, icHandbrake, icRadio, icHorn;
+
+    private Bitmap loadIcon(Context context, int resId) {
+        return BitmapFactory.decodeResource(context.getResources(), resId);
+    }
+
     public TouchControlsView(Context context) {
         super(context);
         setWillNotDraw(false);
+
+        icRun = loadIcon(context, R.drawable.ic_run);
+        icJump = loadIcon(context, R.drawable.ic_jump);
+        icShoot = loadIcon(context, R.drawable.ic_shoot);
+        icEnterVehicle = loadIcon(context, R.drawable.ic_enter_vehicle);
+        icExitVehicle = loadIcon(context, R.drawable.ic_exit_vehicle);
+        icAim = loadIcon(context, R.drawable.ic_aim);
+        icCamera = loadIcon(context, R.drawable.ic_camera);
+        icAccelerate = loadIcon(context, R.drawable.ic_accelerate);
+        icBrake = loadIcon(context, R.drawable.ic_brake);
+        icHandbrake = loadIcon(context, R.drawable.ic_handbrake);
+        icRadio = loadIcon(context, R.drawable.ic_radio);
+        icHorn = loadIcon(context, R.drawable.ic_horn);
 
         layoutPrefs = context.getSharedPreferences("touch_controls_layout", Context.MODE_PRIVATE);
 
@@ -314,6 +344,7 @@ public class TouchControlsView extends View {
         for (Button btn : buttons) {
             btn.visible = false;
             btn.roundedRect = false;
+            btn.icon = null; // each context re-sets whichever buttons it wants iconified
         }
 
         switch (currentContext) {
@@ -401,9 +432,13 @@ public class TouchControlsView extends View {
         rightStick.visible = true;
 
         b(BTN_CROSS).label = "CORRER";
+        b(BTN_CROSS).icon = icRun;
         b(BTN_SQUARE).label = "SALTAR";
+        b(BTN_SQUARE).icon = icJump;
         b(BTN_CIRCLE).label = "DISPARAR";
+        b(BTN_CIRCLE).icon = icShoot;
         b(BTN_TRIANGLE).label = "SUBIR";
+        b(BTN_TRIANGLE).icon = icEnterVehicle;
 
         // Face buttons, diamond above the right stick.
         float faceCx = rightStick.center.x;
@@ -427,12 +462,22 @@ public class TouchControlsView extends View {
         placeCircle(BTN_R2, leftStick.center.x + shGap * 1.5f, rowY, shR);
 
         b(BTN_L1).label = "CAM"; // PED_CENTER_CAMERA_BEHIND_PLAYER, not a phone -- III has none
+        b(BTN_L1).icon = icCamera;
         b(BTN_R1).label = "APUNTAR";
+        b(BTN_R1).icon = icAim;
 
-        // Select (camera view) and Start (pause), small, top corners.
-        placeRect(BTN_SELECT, areaLeft + margin, areaTop + margin, areaLeft + margin + baseRadius * 0.7f, areaTop + margin + baseRadius * 0.35f);
-        placeRect(BTN_START, areaRight - margin - baseRadius * 0.7f, areaTop + margin, areaRight - margin, areaTop + margin + baseRadius * 0.35f);
+        // Select (camera view), top area but clear of the radar (top-left,
+        // see RADAR_LEFT/TOP/WIDTH/HEIGHT in Radar.h -- roughly the left 21%
+        // of the screen). Round, like every other icon button now, instead
+        // of a wide rect the round artwork would get squashed into.
+        float camR = baseRadius * 0.32f;
+        float camCx = Math.max(areaLeft + margin + camR, areaLeft + (areaRight - areaLeft) * 0.24f);
+        placeCircle(BTN_SELECT, camCx, areaTop + margin + camR, camR);
         b(BTN_SELECT).label = "VISTA";
+        b(BTN_SELECT).icon = icCamera;
+
+        // Start (pause), top-right corner.
+        placeRect(BTN_START, areaRight - margin - baseRadius * 0.7f, areaTop + margin, areaRight - margin, areaTop + margin + baseRadius * 0.35f);
         b(BTN_START).label = "≡";
     }
 
@@ -448,7 +493,9 @@ public class TouchControlsView extends View {
         placeRect(BTN_CROSS, px - pedalW / 2, areaBottom - margin - pedalH, px + pedalW / 2, areaBottom - margin);
         placeRect(BTN_SQUARE, px - pedalW / 2, areaBottom - margin - pedalH * 2.1f, px + pedalW / 2, areaBottom - margin - pedalH * 1.1f);
         b(BTN_CROSS).label = "GAS";
+        b(BTN_CROSS).icon = icAccelerate;
         b(BTN_SQUARE).label = "FRENO";
+        b(BTN_SQUARE).icon = icBrake;
 
         float btnR = baseRadius * 0.32f;
         float faceCx = rightStick.center.x;
@@ -456,20 +503,34 @@ public class TouchControlsView extends View {
         placeCircle(BTN_TRIANGLE, faceCx, faceCy - btnR * 1.6f, btnR);
         placeCircle(BTN_CIRCLE, faceCx, faceCy + btnR * 1.6f, btnR);
         b(BTN_TRIANGLE).label = "SALIR";
+        b(BTN_TRIANGLE).icon = icExitVehicle;
         b(BTN_CIRCLE).label = "DISPARAR";
+        b(BTN_CIRCLE).icon = icShoot;
 
         float shR = baseRadius * 0.3f;
         float rowY = leftStick.center.y - baseRadius * 1.9f;
         placeCircle(BTN_L1, leftStick.center.x - shR * 1.2f, rowY, shR);
         placeCircle(BTN_R1, leftStick.center.x + shR * 1.2f, rowY, shR);
         b(BTN_L1).label = "RADIO";
+        b(BTN_L1).icon = icRadio;
         b(BTN_R1).label = "FRENO\nMANO";
+        b(BTN_R1).icon = icHandbrake;
 
         placeCircle(BTN_L3, leftStick.center.x, rowY - shR * 2.2f, shR);
         b(BTN_L3).label = "BOCINA";
+        b(BTN_L3).icon = icHorn;
 
-        placeRect(BTN_SELECT, areaLeft + margin, areaTop + margin, areaLeft + margin + baseRadius * 0.7f, areaTop + margin + baseRadius * 0.35f);
+        float camR = baseRadius * 0.32f;
+        float camCx = Math.max(areaLeft + margin + camR, areaLeft + (areaRight - areaLeft) * 0.24f);
+        placeCircle(BTN_SELECT, camCx, areaTop + margin + camR, camR);
         b(BTN_SELECT).label = "VISTA";
+        b(BTN_SELECT).icon = icCamera;
+
+        // Start (pause) -- was never placed in this context at all, so there
+        // was simply no way to pause while driving. Same top-right spot as
+        // on foot.
+        placeRect(BTN_START, areaRight - margin - baseRadius * 0.7f, areaTop + margin, areaRight - margin, areaTop + margin + baseRadius * 0.35f);
+        b(BTN_START).label = "≡";
     }
 
     private void placeCircle(int id, float cx, float cy, float radius) {
@@ -574,17 +635,21 @@ public class TouchControlsView extends View {
         for (Button btn : buttons) {
             if (!btn.visible) continue;
 
-            fillPaint.setAlpha(btn.pressed ? 150 : 70);
-            if (btn.roundedRect) {
-                canvas.drawRoundRect(btn.hitRect, 14f, 14f, fillPaint);
-                canvas.drawRoundRect(btn.hitRect, 14f, 14f, strokePaint);
+            if (btn.icon != null) {
+                drawIconButton(canvas, btn);
             } else {
-                float r = btn.hitRect.width() / 2f;
-                canvas.drawCircle(btn.hitRect.centerX(), btn.hitRect.centerY(), r, fillPaint);
-                canvas.drawCircle(btn.hitRect.centerX(), btn.hitRect.centerY(), r, strokePaint);
+                fillPaint.setAlpha(btn.pressed ? 150 : 70);
+                if (btn.roundedRect) {
+                    canvas.drawRoundRect(btn.hitRect, 14f, 14f, fillPaint);
+                    canvas.drawRoundRect(btn.hitRect, 14f, 14f, strokePaint);
+                } else {
+                    float r = btn.hitRect.width() / 2f;
+                    canvas.drawCircle(btn.hitRect.centerX(), btn.hitRect.centerY(), r, fillPaint);
+                    canvas.drawCircle(btn.hitRect.centerX(), btn.hitRect.centerY(), r, strokePaint);
+                }
+                float maxWidth = (btn.roundedRect ? btn.hitRect.width() : btn.hitRect.width() * 0.82f) - 8f;
+                drawFittedLabel(canvas, btn.label, btn.hitRect.centerX(), btn.hitRect.centerY(), maxWidth, baseLabelSize);
             }
-            float maxWidth = (btn.roundedRect ? btn.hitRect.width() : btn.hitRect.width() * 0.82f) - 8f;
-            drawFittedLabel(canvas, btn.label, btn.hitRect.centerX(), btn.hitRect.centerY(), maxWidth, baseLabelSize);
 
             if (editMode && btn == selectedButton) {
                 drawSelectionRing(canvas, btn.hitRect.centerX(), btn.hitRect.centerY(),
@@ -600,6 +665,38 @@ public class TouchControlsView extends View {
         }
 
         drawEditToolbar(canvas);
+    }
+
+    // Reused every frame instead of allocated per button, same as the paints above.
+    private final Rect iconSrcRect = new Rect();
+    private final RectF iconDstRect = new RectF();
+    private final Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+
+    /**
+     * Custom-art buttons (see icRun etc.) are complete button graphics with
+     * their own circular bezel baked in, so this draws the bitmap in place
+     * of the usual fillPaint circle + strokePaint ring + text label -- not
+     * on top of them.
+     */
+    private void drawIconButton(Canvas canvas, Button btn) {
+        RectF r = btn.hitRect;
+        // The art is a complete round button, so it's always drawn as a
+        // square -- sized to the hit area's smaller dimension, a hair over
+        // so the art's own ring lines up with where a thumb actually expects
+        // the edge to be -- never stretched to a non-square hitRect's own
+        // aspect ratio (e.g. GAS/FRENO's pedal rects), which would squash it.
+        float size = Math.min(r.width(), r.height()) * 1.08f;
+        float cx = r.centerX();
+        float cy = r.centerY();
+        iconDstRect.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f);
+        iconSrcRect.set(0, 0, btn.icon.getWidth(), btn.icon.getHeight());
+        canvas.drawBitmap(btn.icon, iconSrcRect, iconDstRect, iconPaint);
+
+        if (btn.pressed) {
+            fillPaint.setAlpha(90);
+            float cr = Math.max(iconDstRect.width(), iconDstRect.height()) / 2f;
+            canvas.drawCircle(iconDstRect.centerX(), iconDstRect.centerY(), cr, fillPaint);
+        }
     }
 
     private void drawSelectionRing(Canvas canvas, float cx, float cy, float radius) {
