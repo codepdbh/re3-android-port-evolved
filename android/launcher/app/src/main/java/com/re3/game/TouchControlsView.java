@@ -516,6 +516,17 @@ public class TouchControlsView extends View {
         b(BTN_R1).label = "FRENO\nMANO";
         b(BTN_R1).icon = icHandbrake;
 
+        // Drive-by (L2/R2 -- CPad::GetLookLeft()/GetLookRight(), read
+        // straight off LeftShoulder2/RightShoulder2). These were never
+        // placed in the vehicle context at all, so there was no way to
+        // shoot out either side while driving. Flanking L1/R1, same
+        // shGap-style spacing layoutOnFoot() uses for its L1/L2/R1/R2 row.
+        float shGap = shR * 2.5f;
+        placeCircle(BTN_L2, leftStick.center.x - shGap * 1.5f, rowY, shR);
+        placeCircle(BTN_R2, leftStick.center.x + shGap * 1.5f, rowY, shR);
+        b(BTN_L2).label = "DISPARAR\nIZQ.";
+        b(BTN_R2).label = "DISPARAR\nDER.";
+
         placeCircle(BTN_L3, leftStick.center.x, rowY - shR * 2.2f, shR);
         b(BTN_L3).label = "BOCINA";
         b(BTN_L3).icon = icHorn;
