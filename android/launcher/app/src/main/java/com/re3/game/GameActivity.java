@@ -54,8 +54,14 @@ import java.io.OutputStream;
  */
 public class GameActivity extends SDLActivity {
 
-    /** Nombre de la carpeta con los archivos del juego, en la raíz del almacenamiento interno. */
-    public static final String GAME_FOLDER_NAME = "re3GTA";
+    /**
+     * Nombre de la carpeta con los archivos del juego, en la raíz del
+     * almacenamiento interno. Viene de BuildConfig (un valor distinto por
+     * product flavor -- "re3GTA" para el juego base, "re3GTA_FWR" para la
+     * variante del mod Frosted Winter Remastered, ver app/build.gradle) para
+     * que ambas apps convivan instaladas sin pisarse los archivos.
+     */
+    public static final String GAME_FOLDER_NAME = BuildConfig.GAME_FOLDER_NAME;
 
     private static final int REQUEST_LEGACY_STORAGE_PERMISSION = 1001;
 

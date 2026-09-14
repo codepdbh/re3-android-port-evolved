@@ -275,6 +275,14 @@ CVehicleModelInfo::HideAllComponentsAtomicCB(RpAtomic *atomic, void *data)
 RpMaterial*
 CVehicleModelInfo::HasAlphaMaterialCB(RpMaterial *material, void *data)
 {
+	// A malformed/mod-exported vehicle DFF can carry a null entry in its
+	// material list (seen crashing here with a "Frosted Winter Remastered"
+	// vehicle) -- RW's own contract doesn't guarantee against this, so treat
+	// it as "not alpha, stop looking" instead of dereferencing a nil
+	// pointer. No effect on a well-formed model, which never has a null
+	// material here.
+	if(material == nil)
+		return material;
 	if(RpMaterialGetColor(material)->alpha != 0xFF){
 		*(bool*)data = true;
 		return nil;
@@ -714,6 +722,10 @@ CVehicleModelInfo::GetEditableMaterialListCB(RpMaterial *material, void *data)
 	const RwRGBA *col;
 	editableMatCBData *cbdata;
 
+	// See HasAlphaMaterialCB's comment above -- same malformed-DFF guard.
+	if(material == nil)
+		return material;
+
 	cbdata = (editableMatCBData*)data;
 	col = RpMaterialGetColor(material);
 	if(col->red == 0x3C && col->green == 0xFF && col->blue == 0){
@@ -973,6 +985,8 @@ CVehicleModelInfo::DeleteVehicleColourTextures(void)
 RpMaterial*
 CVehicleModelInfo::HasSpecularMaterialCB(RpMaterial *material, void *data)
 {
+	if(material == nil)
+		return material;
 	if(RpMaterialGetSurfaceProperties(material)->specular <= 0.0f)
 		return material;
 	*(bool*)data = true;
@@ -984,6 +998,8 @@ CVehicleModelInfo::SetEnvironmentMapCB(RpMaterial *material, void *data)
 {
 	float spec;
 
+	if(material == nil)
+		return material;
 	spec = RpMaterialGetSurfaceProperties(material)->specular;
 	if(spec <= 0.0f)
 		RpMatFXMaterialSetEffects(material, rpMATFXEFFECTNULL);

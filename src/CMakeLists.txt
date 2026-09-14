@@ -37,6 +37,12 @@ if(ANDROID)
             GLESv3
             OpenSLES
     )
+    # 16KB page size support: without this, libre3.so's own ELF LOAD segments
+    # come out 4KB-aligned, which is unsafe on a device that actually runs
+    # 16KB pages (see the packagingOptions comment in app/build.gradle for the
+    # vendored-library half of this same issue -- that one can't be fixed
+    # here since we don't build those from source).
+    target_link_options(${EXECUTABLE} PRIVATE "-Wl,-z,max-page-size=16384")
 endif()
 
 target_include_directories(${EXECUTABLE}

@@ -532,7 +532,7 @@ PreAllocateRwObjects(void)
 }
 #endif
 
-static RwBool 
+static RwBool
 Initialise3D(void *param)
 {
 	if (RsRwInitialize(param))
@@ -570,8 +570,21 @@ LoadSplash(const char *name)
 	char filename[140];
 	RwTexture *tex = nil;
 
-	if(name == nil)
+	if(name == nil){
+		// DISABLE_LOADING_SCREEN (on by default, see config.h) skips the one
+		// call site in FileLoader.cpp that would otherwise have primed
+		// `splash` with a real texture on the very first level load -- every
+		// OTHER caller here (LoadingIslandScreen, ConvertingTexturesScreen,
+		// ...) still unconditionally draws it, assuming it's already set.
+		// If nothing has loaded a real texture into it yet, `splash` is
+		// still default-constructed/stale and drawing it dereferences a bad
+		// texture pointer (confirmed crashing here via native backtrace, hit
+		// loading a "Frosted Winter Remastered" island). Load a real one
+		// instead of handing back an unset sprite.
+		if(splash.m_pTexture == nil)
+			return LoadSplash(GetRandomSplashScreen());
 		return &splash;
+	}
 	if(splashTxdId == -1)
 		splashTxdId = CTxdStore::AddTxdSlot("splash");
 

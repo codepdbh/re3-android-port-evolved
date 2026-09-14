@@ -34,17 +34,26 @@ enum Config {
 
 	MAXVEHICLESLOADED = 50, // 70 on mobile
 
-	NUMOBJECTINFO = 168, // object.dat
+	// Some object.dat replacements (mod "total conversions") ship well more
+	// than vanilla's 168 entries -- bumped with headroom rather than exactly
+	// matching any one of them; CObjectInfo is small, the extra slots cost
+	// nothing when unused.
+	NUMOBJECTINFO = 320, // object.dat
 
 	// Pool sizes
-	NUMPTRNODES = 30000,  // 26000 on PS2
-	NUMENTRYINFOS = 5400, // 3200 on PS2
+	// Bumped with headroom over vanilla (comments show the original values)
+	// for map-heavy mod "total conversions" that place well more world
+	// entities than vanilla III's own maps ever did -- same rationale as
+	// NUMOBJECTINFO above. Each pool is a flat array; the extra capacity
+	// costs a few MB unused, nothing when it's not needed.
+	NUMPTRNODES = 60000,   // 30000 vanilla, 26000 on PS2
+	NUMENTRYINFOS = 10800, // 5400 vanilla, 3200 on PS2
 	NUMPEDS = 140,        // 90 on PS2
 	NUMVEHICLES = 110,    // 70 on PS2
-	NUMBUILDINGS = 5500,  // 4915 on PS2
-	NUMTREADABLES = 1214,
-	NUMOBJECTS = 450,
-	NUMDUMMIES = 2802, // 2368 on PS2
+	NUMBUILDINGS = 8250,  // 5500 vanilla, 4915 on PS2
+	NUMTREADABLES = 2000, // 1214 vanilla
+	NUMOBJECTS = 900,     // 450 vanilla
+	NUMDUMMIES = 5000,    // 2802 vanilla, 2368 on PS2
 	NUMAUDIOSCRIPTOBJECTS = 256,
 	NUMCUTSCENEOBJECTS = 50,
 
@@ -56,7 +65,7 @@ enum Config {
 	// Path data
 	NUM_PATHNODES = 4930,
 	NUM_CARPATHLINKS = 2076,
-	NUM_MAPOBJECTS = 1250,
+	NUM_MAPOBJECTS = 2500, // 1250 vanilla -- see the pool-size comment above
 	NUM_PATHCONNECTIONS = 10260,
 
 	// Link list lengths
@@ -116,7 +125,7 @@ enum Config {
 	NUM_WATERCANNONS = 3,
 
 	NUMPEDROUTES = 200,
-	NUMPHONES = 50,
+	NUMPHONES = 150, // 50 vanilla -- see the pool-size comment above
 	NUMPEDGROUPS = 31,
 	NUMMODELSPERPEDGROUP = 8,
 	NUMSHOTINFOS = 100,
