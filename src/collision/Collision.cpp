@@ -259,8 +259,21 @@ CCollision::LoadCollisionWhenINeedIt(bool forceChange)
 		CReplay::EmptyReplayBuffer();
 		ISLAND_LOADING_IS(LOW)
 		{
+#ifndef DISABLE_LOADING_SCREEN
+			// Nothing draws this once DISABLE_LOADING_SCREEN is on (see
+			// LoadingIslandScreen()/ConvertingTexturesScreen(), the only
+			// places that ever draw the shared LoadSplash() sprite for a
+			// level transition, both already skip their draw under this
+			// same flag) -- loading it here was pure risk for zero payoff:
+			// CStreaming::Init() (Streaming.cpp) adopts every already-
+			// populated TXD slot, this shared one included, as a regular
+			// evictable streamed asset, and reloading a texture into a slot
+			// the streaming system may since have quietly evicted crashed
+			// here (confirmed via native backtrace, double-destroy on a
+			// freed object).
 			if (CGame::currLevel != LEVEL_GENERIC)
 				LoadSplash(GetLevelSplashScreen(CGame::currLevel));
+#endif
 			CStreaming::RemoveUnusedBigBuildings(CGame::currLevel);
 			CStreaming::RemoveUnusedBuildings(CGame::currLevel);
 			CStreaming::RequestBigBuildings(CGame::currLevel);
@@ -312,8 +325,11 @@ CCollision::SortOutCollisionAfterLoad(void)
 		} else
 #endif
 		CFileLoader::LoadCollisionFromDatFile(CGame::currLevel);
+#ifndef DISABLE_LOADING_SCREEN
+		// See the matching comment above in LoadCollisionScreen()'s caller.
 		if(!CGame::playingIntro)
 			LoadSplash(GetLevelSplashScreen(CGame::currLevel));
+#endif
 	}
 	ms_collisionInMemory = CGame::currLevel;
 	CGame::TidyUpMemory(true, false);

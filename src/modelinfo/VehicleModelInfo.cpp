@@ -272,16 +272,22 @@ CVehicleModelInfo::HideAllComponentsAtomicCB(RpAtomic *atomic, void *data)
 	return atomic;
 }
 
+// A malformed/mod-exported vehicle DFF can carry a garbage entry in its
+// material list (seen crashing on a "Frosted Winter Remastered" vehicle,
+// both as an exact nil and, on a different vehicle, as a small non-null
+// pointer that isn't nil but is just as bogus) -- RW's own contract doesn't
+// guarantee against either. A real heap object is never allocated down in
+// the first page(s) of address space (every mainstream allocator, and the
+// kernel itself, reserves that range specifically to make near-null derefs
+// like this one segfault instead of silently reading garbage), so treating
+// anything below this threshold as "obviously not a real Material*" catches
+// both cases without needing to know exactly how the pointer got corrupted.
+#define BOGUS_POINTER(p) ((uintptr_t)(p) < 0x10000)
+
 RpMaterial*
 CVehicleModelInfo::HasAlphaMaterialCB(RpMaterial *material, void *data)
 {
-	// A malformed/mod-exported vehicle DFF can carry a null entry in its
-	// material list (seen crashing here with a "Frosted Winter Remastered"
-	// vehicle) -- RW's own contract doesn't guarantee against this, so treat
-	// it as "not alpha, stop looking" instead of dereferencing a nil
-	// pointer. No effect on a well-formed model, which never has a null
-	// material here.
-	if(material == nil)
+	if(BOGUS_POINTER(material))
 		return material;
 	if(RpMaterialGetColor(material)->alpha != 0xFF){
 		*(bool*)data = true;
@@ -723,7 +729,7 @@ CVehicleModelInfo::GetEditableMaterialListCB(RpMaterial *material, void *data)
 	editableMatCBData *cbdata;
 
 	// See HasAlphaMaterialCB's comment above -- same malformed-DFF guard.
-	if(material == nil)
+	if(BOGUS_POINTER(material))
 		return material;
 
 	cbdata = (editableMatCBData*)data;
@@ -985,7 +991,7 @@ CVehicleModelInfo::DeleteVehicleColourTextures(void)
 RpMaterial*
 CVehicleModelInfo::HasSpecularMaterialCB(RpMaterial *material, void *data)
 {
-	if(material == nil)
+	if(BOGUS_POINTER(material))
 		return material;
 	if(RpMaterialGetSurfaceProperties(material)->specular <= 0.0f)
 		return material;
@@ -998,7 +1004,7 @@ CVehicleModelInfo::SetEnvironmentMapCB(RpMaterial *material, void *data)
 {
 	float spec;
 
-	if(material == nil)
+	if(BOGUS_POINTER(material))
 		return material;
 	spec = RpMaterialGetSurfaceProperties(material)->specular;
 	if(spec <= 0.0f)

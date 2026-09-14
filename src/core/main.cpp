@@ -342,6 +342,18 @@ DoFade(void)
 		}
 		CSprite2d::DrawRect(rect, fadeColor);
 
+#if !defined ANDROID
+		// This is the fourth call site found drawing the shared LoadSplash()
+		// sprite well after it was first set (see the long comment inside
+		// LoadSplash() itself) -- each one crashed the same way once enough
+		// time/streaming activity passed since the load, and each attempted
+		// fix (checking the TXD slot is still populated) still left this one
+		// crashing, so whatever invalidates the underlying texture here
+		// isn't visible from that angle. This effect is purely cosmetic
+		// (fading the screen in from the loading splash image, vs. every
+		// other case just fading through a flat colour via the DrawRect
+		// above) -- not worth the risk on a platform where it's demonstrably
+		// this fragile.
 		if(CDraw::FadeValue != 0 && TheCamera.m_FadeTargetIsSplashScreen){
 			fadeColor.r = 255;
 			fadeColor.g = 255;
@@ -349,6 +361,7 @@ DoFade(void)
 			fadeColor.a = CDraw::FadeValue;
 			splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), fadeColor, fadeColor, fadeColor, fadeColor);
 		}
+#endif
 	}
 }
 
@@ -570,21 +583,23 @@ LoadSplash(const char *name)
 	char filename[140];
 	RwTexture *tex = nil;
 
-	if(name == nil){
-		// DISABLE_LOADING_SCREEN (on by default, see config.h) skips the one
-		// call site in FileLoader.cpp that would otherwise have primed
-		// `splash` with a real texture on the very first level load -- every
-		// OTHER caller here (LoadingIslandScreen, ConvertingTexturesScreen,
-		// ...) still unconditionally draws it, assuming it's already set.
-		// If nothing has loaded a real texture into it yet, `splash` is
-		// still default-constructed/stale and drawing it dereferences a bad
-		// texture pointer (confirmed crashing here via native backtrace, hit
-		// loading a "Frosted Winter Remastered" island). Load a real one
-		// instead of handing back an unset sprite.
-		if(splash.m_pTexture == nil)
-			return LoadSplash(GetRandomSplashScreen());
+	// CStreaming::Init() (Streaming.cpp) scans every populated TXD slot --
+	// including this "splash" one, allocated outside the normal streaming
+	// system -- and adopts it as a regular streamed asset (STREAMSTATE_LOADED).
+	// Nothing marks it permanent, so the streaming system can legitimately
+	// evict it under memory pressure later (confirmed happening here, on a
+	// GTA III mod with a much larger gta3.img than vanilla) without
+	// LoadSplash() ever being told. Every caller -- LoadSplash(nil) callers
+	// (DoFade(), LoadingIslandScreen(), ...) included, not just a real-name
+	// reload -- trusts splash.m_pTexture as still valid once set; if its TXD
+	// slot has since been evicted, the texture it points to is already gone
+	// too and drawing/destroying it crashes (confirmed via native backtrace).
+	// Check on every call and drop the stale pointer instead.
+	if(splash.m_pTexture && splashTxdId != -1 && CTxdStore::GetSlot(splashTxdId)->texDict == nil)
+		splash.m_pTexture = nil;
+
+	if(name == nil)
 		return &splash;
-	}
 	if(splashTxdId == -1)
 		splashTxdId = CTxdStore::AddTxdSlot("splash");
 
@@ -767,7 +782,19 @@ LoadingIslandScreen(const char *levelName)
 	CFont::InitPerFrame();
 	DefinedState();
 	col = CRGBA(255, 255, 255, 255);
+#ifndef DISABLE_LOADING_SCREEN
+	// LoadSplash(nil) here only ever returns a *cached* sprite -- nothing
+	// on this call path names a real texture to (re)load. DISABLE_LOADING_SCREEN
+	// (on by default, see config.h) already skips priming that cache
+	// elsewhere in the normal case, but other code can also invalidate it
+	// after the fact (e.g. a later LoadSplash(realName) call recycling the
+	// same shared CSprite2d/TXD slot). Drawing it here is purely cosmetic
+	// background -- skip it under DISABLE_LOADING_SCREEN like every other
+	// loading-screen draw already does, rather than trust a cache with no
+	// guarantee of still being valid (confirmed crashing here via a native
+	// backtrace into RwTextureGetRaster on a stale texture pointer).
 	splash->Draw(CRect(0.0f, 0.0f, SCREEN_WIDTH, SCREEN_HEIGHT), col, col, col, col);
+#endif
 	CFont::SetBackgroundOff();
 #ifdef FIX_BUGS
 	CFont::SetScale(SCREEN_SCALE_X(1.5f), SCREEN_SCALE_Y(1.5f));
@@ -1113,7 +1140,17 @@ DisplayGameDebugText()
 {
 	static bool bDisplayPosn = false;
 	static bool bDisplayRate = false;
-#ifndef FINAL
+#if !defined FINAL && !defined ANDROID
+	// CTweakVars::Add() (re3.cpp) crashed here -- a write into memory that
+	// was never mapped at all (confirmed via the tombstone's fault
+	// classification), not just a freed/evicted allocation like the
+	// LoadSplash() issue above. Root cause not pinned down (this is the
+	// first-ever call into the tweak-var system: these are static locals,
+	// constructed exactly once via normal C++ magic-statics, nothing
+	// mod-specific about the codepath itself). This debug-only readout
+	// (developer-facing position/rate overlay, gated behind SETTWEAKPATH's
+	// own debug menu) isn't worth carrying the risk for on a platform
+	// nobody uses the debug menu on anyway.
 	{
 		SETTWEAKPATH("Debug");
 		TWEAKBOOL(bDisplayPosn);

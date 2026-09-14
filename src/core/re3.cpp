@@ -842,6 +842,16 @@ static const char *pTweakVarsDefaultPath = NULL;
 
 void CTweakVars::Add(CTweakVar *var)
 {
+#if defined ANDROID
+	// This whole mechanism only exists to feed the desktop debug menu
+	// (DEBUGMENU, touch-input-unfriendly and not wired up on Android at
+	// all), and crashed here on this platform (see the comment in
+	// DisplayGameDebugText(), main.cpp, for the one confirmed call site --
+	// Particle.cpp/Shadows.cpp register their own tweak vars into this same
+	// list too, so disable it at its one shared choke point rather than at
+	// each call site individually).
+	return;
+#endif
 	if(TweakVarsListSize == -1) {
 		TweakVarsList = (CTweakVar**)malloc(64 * sizeof(CTweakVar*));
 		TweakVarsListSize = 0;
