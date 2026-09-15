@@ -125,7 +125,16 @@ enum Config {
 	NUM_WATERCANNONS = 3,
 
 	NUMPEDROUTES = 200,
-	NUMPHONES = 150, // 50 vanilla -- see the pool-size comment above
+	// NOT safe to bump like the other pools above: GenericGameStorage.cpp's
+	// FixPhoneInfo() serializes exactly NUMPHONES phone entries into the
+	// save file using a HARDCODED byte size (0x1138/0xA30) that assumes the
+	// vanilla count. Bumping this desyncs every save made with the changed
+	// value from that hardcoded size, corrupting everything read after the
+	// phones section -- confirmed: a real player's save (on the second
+	// island) was ruined by a build that had this at 150. Reverted. A mod
+	// with more than 50 phone booths in its map needs a different fix
+	// (e.g. capping how many actually register instead of raising this).
+	NUMPHONES = 50,
 	NUMPEDGROUPS = 31,
 	NUMMODELSPERPEDGROUP = 8,
 	NUMSHOTINFOS = 100,
