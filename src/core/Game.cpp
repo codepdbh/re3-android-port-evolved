@@ -33,6 +33,8 @@
 #include "Garages.h"
 #include "GenericGameStorage.h"
 #include "Glass.h"
+#include "GhostCity.h"
+#include "GhostCityP2P.h"
 #include "HandlingMgr.h"
 #include "Heli.h"
 #include "Hud.h"
@@ -288,6 +290,8 @@ CGame::InitialiseRenderWare(void)
 // missing altogether on PS2
 void CGame::ShutdownRenderWare(void)
 {
+	CGhostCityP2P::Shutdown();
+	CGhostCity::Shutdown();
 #ifdef SCREEN_DROPLETS
 	ScreenDroplets::Shutdown();
 #endif
@@ -828,6 +832,8 @@ void CGame::ReloadIPLs(void)
 	CCranes::InitCranes();
 	CGarages::Init();
 	CWorld::RepositionCertainDynamicObjects();
+	CGhostCity::Initialise();
+	CGhostCityP2P::Initialise();
 	CCullZones::ResolveVisibilities();
 	CRenderer::SortBIGBuildings();
 	CTimer::Update();
@@ -1074,6 +1080,8 @@ void CGame::Process(void)
 		PUSH_MEMID(MEMID_WORLD);
 		CWorld::Process();
 		POP_MEMID();
+		CGhostCity::Process();
+		CGhostCityP2P::Process();
 
 		gAccidentManager.Update();
 		CPacManPickups::Update();
